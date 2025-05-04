@@ -98,16 +98,30 @@ import random
 #             f.write("\n")
 
 
-all_nums = []
-cnt = 0
-with open("test_num.txt", "r") as f:
-    alldata = f.readlines()
-    for line in alldata:
-        nums = list(map(int, filter(str.isdigit, line.split())))
-        all_nums.extend(nums)
-    maxnum = all_nums[0]
-    for i in range(len(all_nums)):
-        cnt += 1
-        if maxnum < all_nums[i]:
-            maxnum = all_nums[i]
-    print(maxnum)
+# all_nums = []
+# cnt = 0
+# with open("test_num.txt", "r") as f:
+#     alldata = f.readlines()
+#     for line in alldata:
+#         nums = list(map(int, filter(str.isdigit, line.split())))
+#         all_nums.extend(nums)
+#     maxnum = all_nums[0]
+#     for i in range(len(all_nums)):
+#         cnt += 1
+#         if maxnum < all_nums[i]:
+#             maxnum = all_nums[i]
+#     print(maxnum)
+
+with open("setup1.txt", "w") as f:
+    config = [
+        {"rank": 0, "ip": "192.168.57.128", "port": 65432},
+        {"rank": 1, "ip": "192.168.57.123"},
+    ]
+    json.dump(config, f)
+# with open("setup1.txt", "r") as f:
+#     allline = json.load(f)
+#     print(len(allline))
+#     # allline = f.readlines()
+#     for d in allline:
+#         d: dict
+#         print(d.get("rank"), d.get("ip"))

@@ -7,6 +7,7 @@ import subprocess
 import os
 from time import sleep
 import asyncio
+import json
 
 filepath_queue = queue.Queue()
 python_path = "/usr/bin/python3"
@@ -16,73 +17,132 @@ script_path = ""
 class My_Socket_Client:
     def __init__(self):
         self.client: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.reduceclient = None
         self.rank = -1
         self.size = -1
         self.myfilename = ""
+        self.taskfilename = ""
+        self.datafilename = ""
+        self.sinkNodeIp = ""
+        self.sinkNodeport = 0
         self.getres = 0
         self.res = []
+        self.cond = threading.Condition()
 
     def connect_server(self, IP_ADDR, IP_PORT):
         try:
             self.client.connect((IP_ADDR, IP_PORT))
-        except socket.timeout:
-            print("超时")
+            senddata = {"type": "client", "payload": "i am client"}
+            self.send_data(data=senddata, data_type="client_online")
         except Exception as e:
             print(f"error code:{e}")
-        finally:
-            senddata = {"type": "client"}
-            self.send_data(senddata)
 
-    def recv_data(self):
+    def client_recv_data(self) -> dict:
+        raw_length = self.client.recv(4)
+        if raw_length == b"":
+            self.client.close()
+            return None
+        data_length = struct.unpack("!I", raw_length)[0]
+        recv_data = b""
+        while len(recv_data) < data_length:
+            pack = self.client.recv(data_length)
+            if not pack:
+                break
+            recv_data += pack
+        data = pickle.loads(recv_data)
+        return data
+
+    def client_handle(self, conn: socket.socket, address: tuple):
         while True:
-            raw_length = self.client.recv(4)
-            if len(raw_length) < 4:
-                raise RuntimeError("接收到的数据长度不足")
-            data_length = struct.unpack("!I", raw_length)[0]
-            recv_data = b""
-            while len(recv_data) < data_length:
-                pack = self.client.recv(data_length)
-                if not pack:
-                    break
-                recv_data += pack
-            data = pickle.loads(recv_data)
-            if data["type"] == "execute_file":
-                with open(data["file_name_copy"], "wb") as f:
-                    f.write(data["payload"])
-                    self.exefilename = data["file_name_copy"]
-                print("执行文件接收完成，等待所有客户端上线后执行")
+            data = self.server_recv_data(conn, address)
+            if isinstance(data, dict):
+                if data.get("type") == "res":
+                    self.getres += 1
+                    self.res.append(int(data["payload"]))
+                    self.cond.notify_all()
+            else:
+                print(data)
 
-            elif data["type"] == "data_file":
-                with open(data["file_name_copy"], "wb") as f:
-                    f.write(data["payload"])
-                    self.datafilename = data["file_name_copy"]
-                    print(self.datafilename)
-                print("数据文件接收完成，等待所有客户端上线后执行")
+    def server_recv_data(self, conn, address) -> dict:
+        raw_len = conn.recv(4)
+        if raw_len == b"":
+            print(f"client address:{address} closed")
+            conn.close()
+            return None
+        data_len = struct.unpack("!I", raw_len)[0]
+        recv_data = b""
+        while len(recv_data) < data_len:
+            pack = conn.recv(data_len)
+            if not pack:
+                break
+            recv_data += pack
+        data = pickle.loads(recv_data)
+        print(data)
+        return data
 
-            elif data["type"] == "client_rank":
-                print(f'my rank is {data["payload"]}')
-                self.rank = data["payload"]
-                print(self.client.getsockname()[0])
-                if self.client.getsockname()[0] == "192.168.57.128":
-                    self.server: socket.socket = socket.socket(
-                        socket.AF_INET, socket.SOCK_STREAM
-                    )
-                    self.server.bind((self.client.getsockname()[0], 65432))
-                    self.server.listen(5)
-                    threading.Thread(target=self.start).start()
-                    threading.Thread(target=self.sendreducedata).start()
-                else:
-                    self.reduceclient: socket.socket = socket.socket(
-                        socket.AF_INET, socket.SOCK_STREAM
-                    )
-                    self.reduceclient.connect(("192.168.57.128", 65432))
-            elif data["type"] == "client_size":
-                print(f'total client num {data["payload"]}')
-                self.size = int(data["payload"])
+    def server_handle(self):
+        while True:
+            data = self.client_recv_data()
+            data_type = data.get("type")
+            if data_type == "task_file":
+                self.save_task_file(data)
+            elif data_type == "data_file":
+                self.save_data_file(data)
+            elif data_type == "setup_file":
+                self.do_setup(data)
             elif data["type"] == "GOON":
-                filepath_queue.put(self.exefilename)
+                filepath_queue.put(self.taskfilename)
 
-    def execute_file(self):
+    def save_task_file(self, data: dict):
+        filename = data.get("file_name_copy")
+        payload = data.get("payload")
+        with open(filename, "wb") as f:
+            f.write(payload)
+            self.taskfilename = filename
+        print(f"任务文件{filename}接收完成.")
+
+    def save_data_file(self, data: dict):
+        filename = data.get("file_name_copy")
+        payload = data.get("payload")
+        with open(filename, "wb") as f:
+            f.write(payload)
+            self.datafilename = filename
+        print(f"数据文件{filename}接收完成.")
+
+    def do_setup(self, data: dict):
+        filename: str = data.get("file_name_copy")
+        payload: bytes = data.get("payload")
+        with open(filename, "wb") as f:
+            f.write(payload)
+        payload_decode: list = json.loads(payload)
+        self.sinkNodeIp = payload_decode[0].get("ip")
+        self.sinkNodeport = payload_decode[0].get("port")
+        self.size = len(payload_decode)
+
+        for config in payload_decode:
+            if config.get("ip") == self.client.getsockname()[0]:
+                self.rank = config.get("rank")
+                break
+
+        if self.rank == 0:
+            self.server: socket.socket = socket.socket(
+                socket.AF_INET, socket.SOCK_STREAM
+            )
+            self.server.bind((self.sinkNodeIp, self.sinkNodeport))
+            self.server.listen(5)
+            threading.Thread(target=self.start).start()
+            threading.Thread(target=self.sendreducedata).start()
+        else:
+            print(
+                "connect to sink node",
+                f"{self.sinkNodeIp},{self.sinkNodeport},{self.rank}",
+            )
+            self.reduceclient: socket.socket = socket.socket(
+                socket.AF_INET, socket.SOCK_STREAM
+            )
+            self.reduceclient.connect((self.sinkNodeIp, self.sinkNodeport))
+
+    def execute_task(self):
         filename = filepath_queue.get()
         print(f"{filename} is going to be executed")
         script_path = os.path.join(os.getcwd(), filename)
@@ -92,7 +152,7 @@ class My_Socket_Client:
                 script_path,
                 str(self.rank),
                 str(self.size),
-                str(self.exefilename),
+                str(self.taskfilename),
                 str(self.datafilename),
             ],
             capture_output=True,
@@ -100,59 +160,33 @@ class My_Socket_Client:
             cwd=os.path.dirname(script_path),
         )
         senddata = {"type": "res", "payload": int(result.stdout)}
-        if self.client.getsockname()[0] == "192.168.57.128":
-            print(result.stdout)
+        if self.rank == 0:
             self.res.append(int(result.stdout))
             self.getres += 1
+            self.cond.notify_all()
         else:
-            self.sendreduce_data(senddata)
+            self.send_data(data=senddata, data_type="reduce_data")
 
-    def send_data(self, res):
-        send_data = pickle.dumps(res)
-        send_data_len = struct.pack("!I", len(send_data))
-        self.client.sendall(send_data_len)
-        self.client.sendall(send_data)
-
-    def sendreduce_data(self, res):
-        send_data = pickle.dumps(res)
-        send_data_len = struct.pack("!I", len(send_data))
-        self.reduceclient.sendall(send_data_len)
-        self.reduceclient.sendall(send_data)
-
-    def client_handle(self, conn: socket.socket, address: tuple):
-        while True:
-            raw_len = conn.recv(4)
-            if raw_len == b"":
-                print(f"client address:{address} closed")
-                conn.close()
-                break
-            data_len = struct.unpack("!I", raw_len)[0]
-            recv_data = b""
-            while len(recv_data) < data_len:
-                pack = conn.recv(data_len)
-                if not pack:
-                    break
-                recv_data += pack
-            data = pickle.loads(recv_data)
-            if isinstance(data, dict):
-                if data["type"] == "res":
-                    self.getres += 1
-                    self.res.append(int(data["payload"]))
-                    print("get reduce data", data["payload"])
-            else:
-                print(data)
+    def send_data(self, **kw):
+        data_type: str = kw.get("data_type")
+        senddata = kw.get("data")
+        socket_data = pickle.dumps(senddata)
+        data_len = struct.pack("!I", len(socket_data))
+        if data_type == "client_online" or data_type == "server_res":
+            self.client.sendall(data_len + socket_data)
+        elif data_type == "reduce_data":
+            self.reduceclient.sendall(data_len + socket_data)
 
     def sendreducedata(self):
-        # print(f"self.getres{self.getres},self.size{self.size}")
-        while True:
-            if self.getres == self.size:
-                print("send reduce data", self.res)
-                self.send_data(max(self.res))
-                break
+        with self.cond:
+            while self.getres != self.size:
+                self.cond.wait()
+            self.send_data(data=max(self.res), data_type="server_res")
 
     def start(self):
         while True:
             conn, address = self.server.accept()
+            print("new client")
             threading.Thread(
                 target=self.client_handle, args=(conn, address), daemon=True
             ).start()
@@ -162,5 +196,5 @@ if __name__ == "__main__":
     my_socket = My_Socket_Client()
     my_socket.connect_server("192.168.57.1", 54321)
     print(f"客户端1本地IP和端口{my_socket.client.getsockname()}")
-    threading.Thread(target=my_socket.recv_data).start()
-    threading.Thread(target=my_socket.execute_file).start()
+    threading.Thread(target=my_socket.server_handle).start()
+    threading.Thread(target=my_socket.execute_task).start()
