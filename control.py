@@ -108,7 +108,6 @@ class My_Socket_Server:
         loop = asyncio.get_event_loop()
         user_input = await loop.run_in_executor(None, input)
         if user_input == "GOON":
-            print("send goon")
             self.starttime = datetime.datetime.now()
             self.broadcast_goon()
 

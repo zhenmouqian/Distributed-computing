@@ -114,6 +114,7 @@ import random
 
 with open("setup1.txt", "w") as f:
     config = [
+        {"task": "task1.py"},
         {"rank": 0, "ip": "192.168.57.128", "port": 65432},
         {"rank": 1, "ip": "192.168.57.123"},
     ]
