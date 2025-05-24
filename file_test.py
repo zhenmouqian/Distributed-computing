@@ -125,3 +125,9 @@ with open("setup1.txt", "w") as f:
 #     for d in allline:
 #         d: dict
 #         print(d.get("rank"), d.get("ip"))
+import psutil
+
+# import netifaces
+
+# print(psutil.net_if_addrs().get("WLAN")[1])
+# print(psutil.net_if_stats())

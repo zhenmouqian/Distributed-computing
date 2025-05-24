@@ -27,6 +27,7 @@ class My_Socket_Client:
         self.sinkNodeport = 0
         self.getres = 0
         self.res = []
+        self.client_list = []
         self.cond = threading.Condition()
 
     def connect_server(self, IP_ADDR, IP_PORT):
@@ -54,12 +55,14 @@ class My_Socket_Client:
 
     def client_handle(self, conn: socket.socket, address: tuple):
         while True:
+            self.client_list.append(conn)
             data = self.server_recv_data(conn, address)
             if isinstance(data, dict):
                 if data.get("type") == "res":
                     self.getres += 1
                     self.res.append(int(data["payload"]))
-                    self.cond.notify_all()
+                    with self.cond:
+                        self.cond.notify_all()
             else:
                 print(data)
 
@@ -84,13 +87,32 @@ class My_Socket_Client:
         while True:
             data = self.client_recv_data()
             data_type = data.get("type")
+            print(data_type)
             if data_type == "task_file":
                 self.save_task_file(data)
             elif data_type == "data_file":
                 self.save_data_file(data)
             elif data_type == "setup_file":
                 self.do_setup(data)
-            elif data["type"] == "GOON":
+            elif data_type == "GOON":
+                if self.rank == 0:
+                    self.server: socket.socket = socket.socket(
+                        socket.AF_INET, socket.SOCK_STREAM
+                    )
+                    self.server.bind((self.sinkNodeIp, self.sinkNodeport))
+                    self.server.listen(5)
+                    threading.Thread(target=self.start).start()
+                    threading.Thread(target=self.send_final_data).start()
+                else:
+                    print(
+                        "connect to sink node",
+                        f"{self.sinkNodeIp},{self.sinkNodeport},{self.rank}",
+                    )
+                    self.reduceclient: socket.socket = socket.socket(
+                        socket.AF_INET, socket.SOCK_STREAM
+                    )
+                    self.reduceclient.connect((self.sinkNodeIp, self.sinkNodeport))
+
                 filepath_queue.put(self.taskfilename)
 
     def save_task_file(self, data: dict):
@@ -114,38 +136,25 @@ class My_Socket_Client:
         payload: bytes = data.get("payload")
         with open(filename, "wb") as f:
             f.write(payload)
-        payload_decode: list = json.loads(payload)
-        self.sinkNodeIp = payload_decode[0].get("ip")
-        self.sinkNodeport = payload_decode[0].get("port")
-        self.size = len(payload_decode)
+        print(f"配置文件{filename}接收完成.")
 
+        payload_decode: list = json.loads(payload)
+        self.task = payload_decode[0].get("task")
+        self.sinkNodeIp = payload_decode[1].get("ip")
+        self.sinkNodeport = payload_decode[1].get("port")
+        self.size = len(payload_decode)
         for config in payload_decode:
-            if config.get("ip") == self.client.getsockname()[0]:
+            if (
+                "ip" in config.key()
+                and config.get("ip") == self.client.getsockname()[0]
+            ):
                 self.rank = config.get("rank")
                 break
 
-        if self.rank == 0:
-            self.server: socket.socket = socket.socket(
-                socket.AF_INET, socket.SOCK_STREAM
-            )
-            self.server.bind((self.sinkNodeIp, self.sinkNodeport))
-            self.server.listen(5)
-            threading.Thread(target=self.start).start()
-            threading.Thread(target=self.sendreducedata).start()
-        else:
-            print(
-                "connect to sink node",
-                f"{self.sinkNodeIp},{self.sinkNodeport},{self.rank}",
-            )
-            self.reduceclient: socket.socket = socket.socket(
-                socket.AF_INET, socket.SOCK_STREAM
-            )
-            self.reduceclient.connect((self.sinkNodeIp, self.sinkNodeport))
-
     def execute_task(self):
-        filename = filepath_queue.get()
-        print(f"{filename} is going to be executed")
-        script_path = os.path.join(os.getcwd(), filename)
+        task_filename = filepath_queue.get()
+        print(f"{task_filename} is going to be executed")
+        script_path = os.path.join(os.getcwd(), task_filename)
         result = subprocess.run(
             [
                 python_path,
@@ -163,7 +172,8 @@ class My_Socket_Client:
         if self.rank == 0:
             self.res.append(int(result.stdout))
             self.getres += 1
-            self.cond.notify_all()
+            with self.cond:
+                self.cond.notify_all()
         else:
             self.send_data(data=senddata, data_type="reduce_data")
 
@@ -177,11 +187,16 @@ class My_Socket_Client:
         elif data_type == "reduce_data":
             self.reduceclient.sendall(data_len + socket_data)
 
-    def sendreducedata(self):
+    def send_final_data(self):
         with self.cond:
             while self.getres != self.size:
                 self.cond.wait()
-            self.send_data(data=max(self.res), data_type="server_res")
+
+            if self.task == "task1":
+                self.send_data(data=max(self.res), data_type="server_res")
+            elif self.task == "task2":
+                pass
+            self.client.close()
 
     def start(self):
         while True:

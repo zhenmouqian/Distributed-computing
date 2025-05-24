@@ -36,16 +36,24 @@ class My_Socket_Server:
                         print(f"time:{self.endtime-self.starttime}")
                         print(data["payload"])
                 else:
+                    self.endtime = datetime.datetime.now()
+                    print(f"time:{self.endtime-self.starttime}")
+                    # time:0:00:00.043207   2
+                    # time:0:00:00.034833   1
                     print(data)
             else:
                 break
 
     def newClientInit(self, conn: socket.socket, address: tuple):
         print(f"new client online {address}")
-        self.clientlist.append(conn)
-        self.send_data(conn, file_name="setup1.txt", data_type="setup_file")
-        self.send_data(conn, file_name="test_num.txt", data_type="data_file")
+        print(f"send file task1.py")
         self.send_data(conn, file_name="task1.py", data_type="task_file")
+        self.clientlist.append(conn)
+        print(f"send file setup1.txt")
+        self.send_data(conn, file_name="setup1.txt", data_type="setup_file")
+        print(f"send file test_num.txt")
+        self.send_data(conn, file_name="test_num.txt", data_type="data_file")
+
         self.clientnum += 1
 
     def recv_data(self, conn: socket.socket, address: tuple):
@@ -77,6 +85,7 @@ class My_Socket_Server:
             or data_type == "setup_file"
         ):
             file_name: str = kw.get("file_name")
+            print(f"sending {file_name}")
             with open(file_name, "rb") as file:
                 senddata = {
                     "type": data_type,
@@ -99,6 +108,7 @@ class My_Socket_Server:
         loop = asyncio.get_event_loop()
         user_input = await loop.run_in_executor(None, input)
         if user_input == "GOON":
+            print("send goon")
             self.starttime = datetime.datetime.now()
             self.broadcast_goon()
 

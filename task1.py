@@ -24,4 +24,3 @@ class My_Cal_Node:
 
 if __name__ == "__main__":
     cal = My_Cal_Node()
-    # cal.do_task()
