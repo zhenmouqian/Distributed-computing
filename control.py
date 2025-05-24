@@ -40,6 +40,9 @@ class My_Socket_Server:
                     print(f"time:{self.endtime-self.starttime}")
                     # time:0:00:00.043207   2
                     # time:0:00:00.034833   1
+
+                    # time:0:00:00.385425   1
+                    # time:0:00:00.358233   2
                     print(data)
             else:
                 break
