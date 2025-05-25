@@ -12,10 +12,9 @@ class My_Cal_Node:
         self.cond = threading.Condition()
         self.rank = int(sys.argv[1])
         self.size = int(sys.argv[2])
-        self.exefilename = str(sys.argv[3])
-        self.datafilename = str(sys.argv[4])
-        self.setupinfo: list = json.loads(sys.argv[5])
-        if self.rank == 0:
+        self.datafilename = str(sys.argv[3])
+        self.setupinfo: list = json.loads(sys.argv[4])
+        if self.rank == 0 and self.size != 1:
             self.res = []
             self.client_list_of_rank0_server = []
             self.rank0_server: socket.socket = socket.socket(
@@ -60,9 +59,10 @@ class My_Cal_Node:
                 else:
                     print("something wrong" + data)
             else:
+                print(f"{conn} offline")
                 break
 
-    def recv_data_for_rank0(self, conn) -> dict:
+    def recv_data_for_rank0(self, conn: socket.socket) -> dict:
         """
         rank0节点接收需要规约的数据
         """
@@ -141,6 +141,7 @@ class My_Cal_Node:
             self.send_data(
                 self.no_rank0_client, {"data_type": "res", "payload": maxnum}
             )
+            self.no_rank0_client.shutdown(socket.SHUT_RDWR)
             self.no_rank0_client.close()
             os._exit(0)
 

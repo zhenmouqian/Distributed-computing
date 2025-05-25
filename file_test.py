@@ -85,39 +85,6 @@ import random
 # data1 = json.loads(data)
 # for d in data1:
 #     print(type(d))
-import datetime
-import random
-
-# all_nums = []
-# start = datetime.datetime.now()
-# with open("test_num.txt", "w") as f:
-#     for _ in range(8560):
-#         data = random.randint(0, 100000)
-#         f.write(str(data) + " ")
-#         if _ % 100 == 0 and _ != 0:
-#             f.write("\n")
-
-
-# all_nums = []
-# cnt = 0
-# with open("test_num.txt", "r") as f:
-#     alldata = f.readlines()
-#     for line in alldata:
-#         nums = list(map(int, filter(str.isdigit, line.split())))
-#         all_nums.extend(nums)
-#     maxnum = all_nums[0]
-#     for i in range(len(all_nums)):
-#         cnt += 1
-#         if maxnum < all_nums[i]:
-#             maxnum = all_nums[i]
-#     print(maxnum)
-
-with open("setup1.txt", "w") as f:
-    config = [
-        {"rank": 0, "ip": "192.168.57.128", "port": 65432},
-        {"rank": 1, "ip": "192.168.57.123"},
-    ]
-    json.dump(config, f)
 # with open("setup1.txt", "r") as f:
 #     allline = json.load(f)
 #     print(len(allline))
@@ -125,9 +92,36 @@ with open("setup1.txt", "w") as f:
 #     for d in allline:
 #         d: dict
 #         print(d.get("rank"), d.get("ip"))
-import psutil
+# import psutil
 
 # import netifaces
 
 # print(psutil.net_if_addrs().get("WLAN")[1])
 # print(psutil.net_if_stats())
+
+
+# import datetime
+# import random
+
+# all_nums = []
+# start = datetime.datetime.now()
+# with open("test_num.txt", "w") as f:
+#     for _ in range(9660):
+#         data = random.randint(0, 100000)
+#         f.write(str(data) + " ")
+#         if _ % 100 == 0 and _ != 0:
+#             f.write("\n")
+
+
+with open("setup1.txt", "w") as f:
+    config = [
+        {"rank": 0, "ip": "192.168.57.128", "port": 65432},
+        {"rank": 1, "ip": "192.168.57.123"},
+    ]
+    json.dump(config, f)
+
+# with open("setup1.txt", "w") as f:
+#     config = [
+#         {"rank": 0, "ip": "192.168.57.128", "port": 65432},
+#     ]
+#     json.dump(config, f)

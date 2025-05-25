@@ -27,7 +27,7 @@ class My_Socket_Client:
     def connect_server(self, IP_ADDR, IP_PORT):
         try:
             self.client.connect((IP_ADDR, IP_PORT))
-            senddata = {"type": "client", "payload": "i am client"}
+            senddata = {"data_type": "client", "payload": "i am client"}
             self.send_data(senddata)
         except Exception as e:
             print(f"error code:{e}")
@@ -38,15 +38,18 @@ class My_Socket_Client:
         """
         while True:
             data = self.client_recv_data()  # 接收来自control的消息
-            data_type = data.get("type")
-            if data_type == "task_file":
-                self.save_task_file(data)
-            elif data_type == "data_file":
-                self.save_data_file(data)
-            elif data_type == "setup_file":
-                self.do_setup(data)
-            elif data_type == "GOON":
-                task_queue.put(self.taskfilename)
+            if data:
+                data_type = data.get("data_type")
+                if data_type == "task_file":
+                    self.save_task_file(data)
+                elif data_type == "data_file":
+                    self.save_data_file(data)
+                elif data_type == "setup_file":
+                    self.do_setup(data)
+                elif data_type == "GOON":
+                    task_queue.put(self.taskfilename)
+            else:
+                break
 
     def client_recv_data(self) -> dict:
         """
@@ -104,7 +107,6 @@ class My_Socket_Client:
                 script_path,
                 str(self.rank),
                 str(self.size),
-                str(self.taskfilename),
                 str(self.datafilename),
                 str(self.setup_info_str),
             ],
@@ -112,7 +114,7 @@ class My_Socket_Client:
             text=True,
         )
         if self.rank == 0:
-            self.send_data(int(result.stdout))
+            self.send_data({"data_type": "res", "payload": (result.stdout)})
 
     def send_data(self, data):
         socket_data = pickle.dumps(data)
@@ -123,6 +125,5 @@ class My_Socket_Client:
 if __name__ == "__main__":
     my_socket = My_Socket_Client()
     my_socket.connect_server("192.168.57.1", 54321)
-    print(f"客户端1本地IP和端口{my_socket.client.getsockname()}")
     threading.Thread(target=my_socket.server_handle).start()
     threading.Thread(target=my_socket.execute_task).start()
