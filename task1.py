@@ -13,16 +13,15 @@ class My_Cal_Node:
         self.rank = int(sys.argv[1])
         self.size = int(sys.argv[2])
         self.datafilename = str(sys.argv[3])
-        self.setupinfo: list = json.loads(sys.argv[4])
+        self.rank0ip: list = str(sys.argv[4])
+        self.rank0port: list = int(sys.argv[5])
         if self.rank == 0 and self.size != 1:
             self.res = []
             self.client_list_of_rank0_server = []
             self.rank0_server: socket.socket = socket.socket(
                 socket.AF_INET, socket.SOCK_STREAM
             )
-            self.rank0_server.bind(
-                (self.setupinfo[0].get("ip"), self.setupinfo[0].get("port"))
-            )
+            self.rank0_server.bind((self.rank0ip, self.rank0port))
             self.rank0_server.listen(5)
             threading.Thread(target=self.start_accept_no_rank0_client).start()
             threading.Thread(target=self.get_final_res).start()
@@ -30,10 +29,7 @@ class My_Cal_Node:
             self.no_rank0_client: socket.socket = socket.socket(
                 socket.AF_INET, socket.SOCK_STREAM
             )
-            self.no_rank0_client.connect(
-                (self.setupinfo[0].get("ip"), self.setupinfo[0].get("port"))
-            )
-            # threading.Thread(target=self.message_handle_for_no_rank0).start()
+            self.no_rank0_client.connect((self.rank0ip, self.rank0port))
         self.do_task1()
 
     def start_accept_no_rank0_client(self):
@@ -59,7 +55,6 @@ class My_Cal_Node:
                 else:
                     print("something wrong" + data)
             else:
-                print(f"{conn} offline")
                 break
 
     def recv_data_for_rank0(self, conn: socket.socket) -> dict:
@@ -80,38 +75,12 @@ class My_Cal_Node:
         data = pickle.loads(recv_data)
         return data
 
-    # def message_handle_for_no_rank0(self):
-    #     """
-    #     每个no_rank0节点处理来自rank0节点的消息
-    #     for task2
-    #     """
-    #     while True:
-    #         data = self.recv_data_for_no_rank0()
-    #         print(data)
-
-    # def recv_data_for_no_rank0(self):
-    #     """
-    #     每个no_rank0节点接收来自rank0节点的消息
-    #     """
-    #     raw_length = self.no_rank0_client.recv(4)
-    #     if raw_length == b"":
-    #         self.no_rank0_client.close()
-    #         return None
-    #     data_length = struct.unpack("!I", raw_length)[0]
-    #     recv_data = b""
-    #     while len(recv_data) < data_length:
-    #         pack = self.no_rank0_client.recv(data_length)
-    #         if not pack:
-    #             break
-    #         recv_data += pack
-    #     data = pickle.loads(recv_data)
-    #     return data
-
     def get_final_res(self):
         with self.cond:
             while len(self.res) != self.size:
                 self.cond.wait()
-            print(max(self.res), flush=True)
+            res = {"data_type": "res", "task": "task1", "res1": (max(self.res))}
+            print(json.dumps(res), flush=True, end="")
         os._exit(0)
 
     def send_data(self, con: socket.socket, data):

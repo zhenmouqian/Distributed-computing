@@ -15,7 +15,8 @@ class My_Cal_Node:
         self.rank = int(sys.argv[1])
         self.size = int(sys.argv[2])
         self.datafilename = str(sys.argv[3])
-        self.setupinfo: list = json.loads(sys.argv[4])
+        self.rank0ip: list = str(sys.argv[4])
+        self.rank0port: list = int(sys.argv[5])
         self.maxNum = 0
         self.firstres = []
         self.secondres = []
@@ -26,9 +27,7 @@ class My_Cal_Node:
             self.rank0_server: socket.socket = socket.socket(
                 socket.AF_INET, socket.SOCK_STREAM
             )
-            self.rank0_server.bind(
-                (self.setupinfo[0].get("ip"), self.setupinfo[0].get("port"))
-            )
+            self.rank0_server.bind((self.rank0ip, self.rank0port))
             self.rank0_server.listen(5)
             threading.Thread(target=self.start_accept_no_rank0_client).start()
             threading.Thread(target=self.get_first_res).start()
@@ -37,9 +36,7 @@ class My_Cal_Node:
             self.no_rank0_client: socket.socket = socket.socket(
                 socket.AF_INET, socket.SOCK_STREAM
             )
-            self.no_rank0_client.connect(
-                (self.setupinfo[0].get("ip"), self.setupinfo[0].get("port"))
-            )
+            self.no_rank0_client.connect((self.rank0ip, self.rank0port))
             threading.Thread(target=self.message_handle_for_no_rank0).start()
 
         self.do_task2()
@@ -142,7 +139,8 @@ class My_Cal_Node:
                 cnt += 1
                 self.secondcond.wait()
             self.secondres.sort(reverse=True)
-            print(self.secondres[1], flush=True, end="")
+            res = {"data_type": "res", "task": "task2", "res2": self.secondres[1]}
+            print(json.dumps(res), flush=True, end="")
         os._exit(0)
 
     def send_data(self, con: socket.socket, data):

@@ -20,7 +20,6 @@ class My_Socket_Client:
         self.rank = -1
         self.size = -1
         self.setup_info = []
-        self.setup_info_str = ""
         self.taskfilename = ""
         self.datafilename = ""
 
@@ -40,14 +39,20 @@ class My_Socket_Client:
             data = self.client_recv_data()  # 接收来自control的消息
             if data:
                 data_type = data.get("data_type")
-                if data_type == "task_file":
+                if data_type == "data":
+                    if data.get("payload") == "close":
+                        task_queue.put("close")
+                        self.client.shutdown(socket.SHUT_RDWR)
+                        self.client.close()
+                        break
+                    elif data.get("payload") == "GOON":
+                        task_queue.put(self.taskfilename)
+                elif data_type == "task_file":
                     self.save_task_file(data)
                 elif data_type == "data_file":
                     self.save_data_file(data)
                 elif data_type == "setup_file":
                     self.do_setup(data)
-                elif data_type == "GOON":
-                    task_queue.put(self.taskfilename)
             else:
                 break
 
@@ -92,7 +97,6 @@ class My_Socket_Client:
             f.write(payload)
         print(f"配置文件{filename}接收完成.")
         self.setup_info: list = json.loads(payload)
-        self.setup_info_str: str = payload.decode()
         self.size = len(self.setup_info)
         for config in self.setup_info:
             if config.get("ip") == self.client.getsockname()[0]:
@@ -100,21 +104,28 @@ class My_Socket_Client:
                 break
 
     def execute_task(self):
-        script_path = os.path.join(os.getcwd(), task_queue.get())
-        result = subprocess.run(
-            [
-                python_path,
-                script_path,
-                str(self.rank),
-                str(self.size),
-                str(self.datafilename),
-                str(self.setup_info_str),
-            ],
-            capture_output=True,
-            text=True,
-        )
-        if self.rank == 0:
-            self.send_data({"data_type": "res", "payload": (result.stdout)})
+        while True:
+            param = task_queue.get()
+            if param == "close":
+                break
+            script_path = os.path.join(os.getcwd(), param)
+            result = subprocess.run(
+                [
+                    python_path,
+                    script_path,
+                    str(self.rank),
+                    str(self.size),
+                    str(self.datafilename),
+                    str(self.setup_info[0].get("ip")),
+                    str(self.setup_info[0].get("port")),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            print(f"stderr:{result.stderr}")
+            print(f"strout:{result.stdout}")
+            if self.rank == 0:
+                self.send_data(json.loads(result.stdout))
 
     def send_data(self, data):
         socket_data = pickle.dumps(data)

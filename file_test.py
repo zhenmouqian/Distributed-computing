@@ -113,15 +113,15 @@ import random
 #             f.write("\n")
 
 
-with open("setup1.txt", "w") as f:
-    config = [
-        {"rank": 0, "ip": "192.168.57.128", "port": 65432},
-        {"rank": 1, "ip": "192.168.57.123"},
-    ]
-    json.dump(config, f)
-
 # with open("setup1.txt", "w") as f:
 #     config = [
 #         {"rank": 0, "ip": "192.168.57.128", "port": 65432},
+#         {"rank": 1, "ip": "192.168.57.123"},
 #     ]
 #     json.dump(config, f)
+
+with open("setup1.txt", "w") as f:
+    config = [
+        {"rank": 0, "ip": "192.168.57.128", "port": 65432},
+    ]
+    json.dump(config, f)
