@@ -5,7 +5,8 @@ import pickle
 import asyncio
 import threading
 import datetime
-import sys
+
+Server_IP = "192.168.57.1"
 
 
 class My_Socket_Server:
@@ -40,11 +41,11 @@ class My_Socket_Server:
                         self.endtime = datetime.datetime.now()
                         print(f"time:{self.endtime-self.starttime}")
                         print(f"Get final result : {data}")
-                    # time:0:00:00.385425   1.1
-                    # time:0:00:00.358233   1.2
+                    # time:0:00:00.043251   1.1
+                    # time:0:00:00.052753   1.2
 
                     # time:0:00:00.056767   2.1
-                    # time:0:00:00.062840   2.2
+                    # time:0:00:00.054463   2.2
             else:
                 break
 
@@ -128,6 +129,6 @@ class My_Socket_Server:
 
 
 if __name__ == "__main__":
-    my_socket = My_Socket_Server("192.168.57.1", 54321)
+    my_socket = My_Socket_Server(Server_IP, 54321)
     threading.Thread(target=my_socket.start).start()
     asyncio.run(my_socket.GOON())

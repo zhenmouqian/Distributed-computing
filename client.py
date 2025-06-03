@@ -6,11 +6,12 @@ import threading
 import subprocess
 import os
 from time import sleep
-import asyncio
 import json
 
+Server_IP = "192.168.57.1"
+
 task_queue = queue.Queue()
-python_path = "/usr/bin/python3"
+python_path = "python3"
 script_path = ""
 
 
@@ -67,7 +68,8 @@ class My_Socket_Client:
         data_length = struct.unpack("!I", raw_length)[0]
         recv_data = b""
         while len(recv_data) < data_length:
-            pack = self.client.recv(data_length)
+            remaining = data_length - len(recv_data)
+            pack = self.client.recv(min(4096, remaining))
             if not pack:
                 break
             recv_data += pack
@@ -101,31 +103,37 @@ class My_Socket_Client:
         for config in self.setup_info:
             if config.get("ip") == self.client.getsockname()[0]:
                 self.rank = config.get("rank")
-                break
+                return
+        self.rank = -1
 
     def execute_task(self):
         while True:
-            param = task_queue.get()
-            if param == "close":
-                break
-            script_path = os.path.join(os.getcwd(), param)
-            result = subprocess.run(
-                [
-                    python_path,
-                    script_path,
-                    str(self.rank),
-                    str(self.size),
-                    str(self.datafilename),
-                    str(self.setup_info[0].get("ip")),
-                    str(self.setup_info[0].get("port")),
-                ],
-                capture_output=True,
-                text=True,
-            )
-            print(f"stderr:{result.stderr}")
-            print(f"strout:{result.stdout}")
-            if self.rank == 0:
-                self.send_data(json.loads(result.stdout))
+            try:
+                param = task_queue.get()
+                if param == "close":
+                    break
+                if self.rank == -1:
+                    continue
+                script_path = os.path.join(os.getcwd(), param)
+                result = subprocess.run(
+                    [
+                        python_path,
+                        script_path,
+                        str(self.rank),
+                        str(self.size),
+                        str(self.datafilename),
+                        str(self.setup_info[0].get("ip")),
+                        str(self.setup_info[0].get("port")),
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+                print(f"stderr:{result.stderr}")
+                print(f"strout:{result.stdout}")
+                if self.rank == 0:
+                    self.send_data(json.loads(result.stdout))
+            except Exception as e:
+                print(f"in execute_task exception {e}")
 
     def send_data(self, data):
         socket_data = pickle.dumps(data)
@@ -135,6 +143,6 @@ class My_Socket_Client:
 
 if __name__ == "__main__":
     my_socket = My_Socket_Client()
-    my_socket.connect_server("192.168.57.1", 54321)
+    my_socket.connect_server(Server_IP, 54321)
     threading.Thread(target=my_socket.server_handle).start()
     threading.Thread(target=my_socket.execute_task).start()

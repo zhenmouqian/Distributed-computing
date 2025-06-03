@@ -15,15 +15,13 @@ class My_Cal_Node:
         self.rank = int(sys.argv[1])
         self.size = int(sys.argv[2])
         self.datafilename = str(sys.argv[3])
-        self.rank0ip: list = str(sys.argv[4])
-        self.rank0port: list = int(sys.argv[5])
+        self.rank0ip = str(sys.argv[4])
+        self.rank0port = int(sys.argv[5])
         self.maxNum = 0
         self.firstres = []
         self.secondres = []
         self.client_list_of_rank0_server = []
-
         if self.rank == 0:
-
             self.rank0_server: socket.socket = socket.socket(
                 socket.AF_INET, socket.SOCK_STREAM
             )
@@ -32,12 +30,14 @@ class My_Cal_Node:
             threading.Thread(target=self.start_accept_no_rank0_client).start()
             threading.Thread(target=self.get_first_res).start()
             threading.Thread(target=self.get_final_res).start()
-        else:
-            self.no_rank0_client: socket.socket = socket.socket(
-                socket.AF_INET, socket.SOCK_STREAM
-            )
-            self.no_rank0_client.connect((self.rank0ip, self.rank0port))
-            threading.Thread(target=self.message_handle_for_no_rank0).start()
+        elif self.size != 1:
+            sock: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((self.rank0ip, self.rank0port))
+            self.no_rank0_client = sock
+            assert isinstance(self.no_rank0_client, socket.socket)
+            threading.Thread(
+                target=self.message_handle_for_no_rank0, daemon=True
+            ).start()
 
         self.do_task2()
 
@@ -169,7 +169,7 @@ class My_Cal_Node:
                 self.firstres.append(maxnum)
                 with self.firstcond:
                     self.firstcond.notify_all()
-            else:
+            elif self.size != 1:
                 self.send_data(
                     self.no_rank0_client, {"data_type": "res1", "payload": maxnum}
                 )
@@ -196,7 +196,7 @@ class My_Cal_Node:
                     self.secondres.extend([firstMaxPrimeNum, secondMaxPrimeNum])
                     with self.secondcond:
                         self.secondcond.notify_all()
-                else:
+                elif self.size != 1:
                     self.send_data(
                         self.no_rank0_client,
                         {
@@ -204,6 +204,7 @@ class My_Cal_Node:
                             "payload": [firstMaxPrimeNum, secondMaxPrimeNum],
                         },
                     )
+                    print(f"rank {self.rank} node finish task", flush=True, end="")
                     self.no_rank0_client.shutdown(socket.SHUT_RDWR)
                     self.no_rank0_client.close()
 

@@ -13,9 +13,9 @@ class My_Cal_Node:
         self.rank = int(sys.argv[1])
         self.size = int(sys.argv[2])
         self.datafilename = str(sys.argv[3])
-        self.rank0ip: list = str(sys.argv[4])
-        self.rank0port: list = int(sys.argv[5])
-        if self.rank == 0 and self.size != 1:
+        self.rank0ip = str(sys.argv[4])
+        self.rank0port = int(sys.argv[5])
+        if self.rank == 0:
             self.res = []
             self.client_list_of_rank0_server = []
             self.rank0_server: socket.socket = socket.socket(
@@ -25,7 +25,7 @@ class My_Cal_Node:
             self.rank0_server.listen(5)
             threading.Thread(target=self.start_accept_no_rank0_client).start()
             threading.Thread(target=self.get_final_res).start()
-        else:
+        elif self.size != 1:
             self.no_rank0_client: socket.socket = socket.socket(
                 socket.AF_INET, socket.SOCK_STREAM
             )
@@ -106,7 +106,7 @@ class My_Cal_Node:
             self.res.append(maxnum)
             with self.cond:
                 self.cond.notify_all()
-        else:
+        elif self.size != 1:
             self.send_data(
                 self.no_rank0_client, {"data_type": "res", "payload": maxnum}
             )
