@@ -63,6 +63,9 @@ class My_Socket_Server:
         raw_len = conn.recv(4)
         if raw_len == b"":
             print(f"client address:{address} closed")
+            if conn in self.clientlist:
+                self.clientlist.remove(conn)
+            conn.shutdown(socket.SHUT_RDWR)
             conn.close()
             return None
         data_len = struct.unpack("!I", raw_len)[0]
@@ -97,37 +100,48 @@ class My_Socket_Server:
                 data_len = struct.pack("!I", len(socket_data))
                 conn.sendall(data_len + socket_data)
 
-    def broadcast_goon(self):
+    def broadcast_goon(self, target_ips: list[str]):
         for con in self.clientlist:
-            self.send_data(con, data_type="data", payload="GOON")
+            peer_ip = con.getpeername()[0]
+            if peer_ip in target_ips:
+                self.send_data(
+                    con,
+                    data_type="data",
+                    payload={"action": "GOON", "target_ips": target_ips},
+                )
 
     async def GOON(self):
         loop = asyncio.get_event_loop()
         while True:
             user_input = await loop.run_in_executor(None, input)
-            if user_input == "GOON":
+            if user_input.startswith("GOON"):
+                # 例如输入：GOON 192.168.0.2,192.168.0.3
+                parts = user_input.strip().split()
+                if len(parts) > 1:
+                    target_ips = parts[1].split(",")
+                else:
+                    target_ips = [conf.get("ip") for conf in self.setup_info]
                 self.starttime = datetime.datetime.now()
-                self.broadcast_goon()
-            if user_input == "task1" and self.allclientOnline:
+                self.broadcast_goon(target_ips)
+            elif user_input.startswith("task"):
                 for conn in self.clientlist:
-                    self.send_data(conn, file_name="task1.py", data_type="task_file")
+                    self.send_data(
+                        conn, file_name=f"{user_input}.py", data_type="task_file"
+                    )
                     self.send_data(conn, file_name="setup1.txt", data_type="setup_file")
                     self.send_data(
                         conn, file_name="test_num.txt", data_type="data_file"
                     )
-            if user_input == "task2" and self.allclientOnline:
+            elif user_input == "close":
                 for conn in self.clientlist:
-                    self.send_data(conn, file_name="task2.py", data_type="task_file")
-                    self.send_data(conn, file_name="setup1.txt", data_type="setup_file")
                     self.send_data(
-                        conn, file_name="test_num.txt", data_type="data_file"
+                        conn,
+                        data_type="data",
+                        payload={"action": "close"},
                     )
-            if user_input == "close":
-                for conn in self.clientlist:
-                    self.send_data(conn, data_type="data", payload="close")
-                    self.clientnum = 0
-                    self.clientlist = []
-                    self.allclientOnline = False
+                self.clientnum = 0
+                self.clientlist = []
+                self.allclientOnline = False
 
 
 if __name__ == "__main__":
