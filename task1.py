@@ -5,8 +5,10 @@ class My_Cal_Node:
     def __init__(self):
         self.rank = int(sys.argv[1])
         self.size = int(sys.argv[2])
-        self.exefilename = sys.argv[3]
-        self.datafilename = sys.argv[4]
+        self.datafilename = str(sys.argv[4])
+        self.task1_1()
+
+    def task1_1(self):
         all_nums = []
         cnt = 0
         with open(self.datafilename, "r") as f:

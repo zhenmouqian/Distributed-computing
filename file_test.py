@@ -85,13 +85,13 @@ import random
 # data1 = json.loads(data)
 # for d in data1:
 #     print(type(d))
-import datetime
-import random
+# import datetime
+# import random
 
 # all_nums = []
 # start = datetime.datetime.now()
 # with open("test_num.txt", "w") as f:
-#     for _ in range(8560):
+#     for _ in range(100999):
 #         data = random.randint(0, 100000)
 #         f.write(str(data) + " ")
 #         if _ % 100 == 0 and _ != 0:
@@ -114,7 +114,6 @@ import random
 
 with open("setup1.txt", "w") as f:
     config = [
-        {"task": "task1.py"},
         {"rank": 0, "ip": "192.168.57.128", "port": 65432},
         {"rank": 1, "ip": "192.168.57.123"},
     ]

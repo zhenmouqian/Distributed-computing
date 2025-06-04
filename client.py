@@ -9,7 +9,7 @@ from time import sleep
 import asyncio
 import json
 
-filepath_queue = queue.Queue()
+task_queue = queue.Queue()
 python_path = "/usr/bin/python3"
 script_path = ""
 
@@ -20,43 +20,44 @@ class My_Socket_Client:
         self.no_rank0_client = None
         self.rank0_server = None
         self.client_list_of_rank0_server = []
+        self.task2res1 = -1
         self.rank = -1
         self.size = -1
+        self.task = ""
         self.taskfilename = ""
         self.datafilename = ""
-        self.sinkNodeIp = ""
-        self.sinkNodeport = 0
+        self.rank0ip = ""
+        self.rank0port = 0
         self.res = []
         self.cond = threading.Condition()
+        self.rank0_server_started = False
 
     def connect_server(self, IP_ADDR, IP_PORT):
         try:
             self.client.connect((IP_ADDR, IP_PORT))
-            senddata = {"type": "client", "payload": "i am client"}
-            self.send_data(data=senddata, data_type="client_online")
+            senddata = {"data_type": "client", "payload": "i am client"}
+            self.send_data(self.client, senddata)
         except Exception as e:
             print(f"error code:{e}")
 
     def start_accept_no_rank0_client(self):
         while True:
             conn, address = self.rank0_server.accept()
-            print(f"new client{conn}")
             threading.Thread(
-                target=self.client_handle_for_rank0, args=(conn, address), daemon=True
+                target=self.message_handle_for_rank0, args=(conn, address), daemon=True
             ).start()
 
-    def client_handle_for_rank0(self, conn: socket.socket, address: tuple):
+    def message_handle_for_rank0(self, conn: socket.socket, address: tuple):
         """
-        rank为0的节点处理规约数据
+        rank0节点处理规约数据
         """
         self.client_list_of_rank0_server.append(conn)
         while True:
-            data = self.server_recv_data_for_rank0(conn)  # 接收需要进行规约的数据
+            data = self.recv_data(conn)  # 接收需要进行规约的数据
             if data:
                 if isinstance(data, dict):
-                    if data.get("type") == "res":
-                        self.res.append(int(data["payload"]))
-                        print(data["payload"])
+                    if data.get("data_type") == "res":
+                        self.res.append(data["payload"])
                         with self.cond:
                             self.cond.notify_all()
                 else:
@@ -64,45 +65,37 @@ class My_Socket_Client:
             else:
                 break
 
-    def server_recv_data_for_rank0(self, conn) -> dict:
-        """
-        rank0节点接收需要规约的数据
-        """
-        raw_len = conn.recv(4)
-        if raw_len == b"":
-            conn.close()
-            return None
-        data_len = struct.unpack("!I", raw_len)[0]
-        recv_data = b""
-        while len(recv_data) < data_len:
-            pack = conn.recv(data_len)
-            if not pack:
-                break
-            recv_data += pack
-        data = pickle.loads(recv_data)
-        return data
-
-    def server_handle_for_no_rank0(self):
+    def message_handle_for_no_rank0(self):
         """
         每个no_rank0节点处理来自rank0节点的消息
         for task2
         """
         while True:
-            data = self.no_rank0_client_recv_data()
-            print(data)
+            data = self.recv_data(self.no_rank0_client)
+            if data and isinstance(data, dict):
+                data_type = data.get("data_type")
+                if data_type == "task2res1":
+                    self.task2res1 = data.get("payload")
+                    task_queue.put(
+                        {
+                            "file": self.taskfilename,
+                            "stage": 2,
+                            "param": data.get("payload"),
+                        }
+                    )
+            else:
+                break
 
-    def no_rank0_client_recv_data(self):
-        """
-        每个no_rank0节点接收来自rank0节点的消息
-        """
-        raw_length = self.no_rank0_client.recv(4)
-        if raw_length == b"":
-            self.client.close()
+    def recv_data(self, conn: socket.socket) -> dict:
+        raw_len = conn.recv(4)
+        if raw_len == b"":
+            conn.close()
             return None
-        data_length = struct.unpack("!I", raw_length)[0]
+        data_length = struct.unpack("!I", raw_len)[0]
         recv_data = b""
         while len(recv_data) < data_length:
-            pack = self.no_rank0_client.recv(data_length)
+            remaining = data_length - len(recv_data)
+            pack = conn.recv(min(4096, remaining))
             if not pack:
                 break
             recv_data += pack
@@ -114,53 +107,27 @@ class My_Socket_Client:
         每个client处理来自control节点的消息
         """
         while True:
-            data = self.client_recv_data()  # 接收来自control的消息
-            data_type = data.get("type")
-            print(data_type)
-            if data_type == "task_file":
-                self.save_task_file(data)
-            elif data_type == "data_file":
-                self.save_data_file(data)
-            elif data_type == "setup_file":
-                self.do_setup(data)
-            elif data_type == "GOON":
-                if self.rank == 0:
-                    self.rank0_server: socket.socket = socket.socket(
-                        socket.AF_INET, socket.SOCK_STREAM
-                    )
-                    self.rank0_server.bind((self.sinkNodeIp, self.sinkNodeport))
-                    self.rank0_server.listen(5)
-                    threading.Thread(target=self.start_accept_no_rank0_client).start()
-                    threading.Thread(target=self.send_final_data).start()
-                else:
-                    print(
-                        "connect to sink node",
-                        f"{self.sinkNodeIp},{self.sinkNodeport},{self.rank}",
-                    )
-                    self.no_rank0_client: socket.socket = socket.socket(
-                        socket.AF_INET, socket.SOCK_STREAM
-                    )
-                    self.no_rank0_client.connect((self.sinkNodeIp, self.sinkNodeport))
-                    threading.Thread(target=self.server_handle_for_no_rank0).start()
-                filepath_queue.put(self.taskfilename)
-
-    def client_recv_data(self) -> dict:
-        """
-        每个client节点接收来自control的消息
-        """
-        raw_length = self.client.recv(4)
-        if raw_length == b"":
-            self.client.close()
-            return None
-        data_length = struct.unpack("!I", raw_length)[0]
-        recv_data = b""
-        while len(recv_data) < data_length:
-            pack = self.client.recv(data_length)
-            if not pack:
+            data = self.recv_data(self.client)  # 接收来自control的消息
+            if data:
+                data_type = data.get("data_type")
+                if data_type == "data":
+                    if data.get("payload") == "close":
+                        task_queue.put({"file": "", "stage": 0, "param": "close"})
+                        self.client.shutdown(socket.SHUT_RDWR)
+                        self.client.close()
+                        break
+                    elif data.get("payload") == "GOON":
+                        task_queue.put(
+                            {"file": self.taskfilename, "stage": 1, "param": 0}
+                        )
+                elif data_type == "task_file":
+                    self.save_task_file(data)
+                elif data_type == "data_file":
+                    self.save_data_file(data)
+                elif data_type == "setup_file":
+                    self.do_setup(data)
+            else:
                 break
-            recv_data += pack
-        data = pickle.loads(recv_data)
-        return data
 
     def save_task_file(self, data: dict):
         filename = data.get("file_name_copy")
@@ -169,6 +136,7 @@ class My_Socket_Client:
             f.write(payload)
             self.taskfilename = filename
         print(f"任务文件{filename}接收完成.")
+        self.task = filename[:5]
 
     def save_data_file(self, data: dict):
         filename = data.get("file_name_copy")
@@ -180,81 +148,109 @@ class My_Socket_Client:
 
     def do_setup(self, data: dict):
         filename: str = data.get("file_name_copy")
-        payload: bytes = data.get("payload")
+        setup_payload: bytes = data.get("payload")
         with open(filename, "wb") as f:
-            f.write(payload)
+            f.write(setup_payload)
         print(f"配置文件{filename}接收完成.")
 
-        payload_decode: list = json.loads(payload)
-        self.task = payload_decode[0].get("task")
-        self.sinkNodeIp = payload_decode[1].get("ip")
-        self.sinkNodeport = payload_decode[1].get("port")
-        self.size = len(payload_decode) - 1
+        payload_decode: list = json.loads(setup_payload)
+        self.rank0ip = payload_decode[0].get("ip")
+        self.rank0port = payload_decode[0].get("port")
+        self.size = len(payload_decode)
+        getmyip = False
         for config in payload_decode:
-            if (
-                "ip" in config.keys()
-                and config.get("ip") == self.client.getsockname()[0]
-            ):
+            if config.get("ip") == self.client.getsockname()[0]:
                 self.rank = config.get("rank")
+                getmyip = True
                 break
+        if not getmyip:
+            self.rank = -1
+        if self.rank == 0:
+            if not self.rank0_server_started:
+                self.rank0_server: socket.socket = socket.socket(
+                    socket.AF_INET, socket.SOCK_STREAM
+                )
+                self.rank0_server.bind((self.rank0ip, self.rank0port))
+                self.rank0_server.listen(5)
+                threading.Thread(target=self.start_accept_no_rank0_client).start()
+                threading.Thread(target=self.get_res).start()
+                self.rank0_server_started = True
+        else:
+            if self.no_rank0_client is None:
+                sock: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect((self.rank0ip, self.rank0port))
+                self.no_rank0_client: socket.socket = sock
+                assert isinstance(self.no_rank0_client, socket.socket)
+                threading.Thread(
+                    target=self.message_handle_for_no_rank0, daemon=True
+                ).start()
 
     def execute_task(self):
-        task_filename = filepath_queue.get()
-        print(f"{task_filename} is going to be executed")
-        script_path = os.path.join(os.getcwd(), task_filename)
-        result = subprocess.run(
-            [
-                python_path,
-                script_path,
-                str(self.rank),
-                str(self.size),
-                str(self.taskfilename),
-                str(self.datafilename),
-            ],
-            capture_output=True,
-            text=True,
-            cwd=os.path.dirname(script_path),
-        )
-        if self.rank == 0:
-            self.res.append(int(result.stdout))
-            print(f"my result {int(result.stdout)}")
+        while True:
+            try:
+                if self.rank != -1:
+                    obj: dict = task_queue.get()
+                    task_filename = obj.get("file")
+                    param = obj.get("param")
+                    self.stage = obj.get("stage")
+                    script_path = os.path.join(os.getcwd(), task_filename)
+                    print(f"stage = {str(self.stage)}")
+                    result = subprocess.run(
+                        [
+                            python_path,
+                            script_path,
+                            str(self.rank),
+                            str(self.size),
+                            str(self.stage),
+                            str(self.datafilename),
+                            str(param),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        cwd=os.path.dirname(script_path),
+                    )
+                    print(f"stderr:{result.stderr}")
+                    print(f"strout:{result.stdout}")
+                    if self.rank == 0:
+                        self.res.append(result.stdout)
+                        with self.cond:
+                            self.cond.notify_all()
+                    else:
+                        senddata = {"data_type": "res", "payload": result.stdout}
+                        self.send_data(self.no_rank0_client, senddata)
+            except Exception as e:
+                print(f"in execute_task exception {e}")
+
+    def get_res(self):
+        while True:
             with self.cond:
-                self.cond.notify_all()
-        else:
-            senddata = {"type": "res", "payload": int(result.stdout)}
-            self.send_data(data=senddata, data_type="reduce_data")
+                while len(self.res) != self.size:
+                    self.cond.wait()
+                if self.task == "task1":
+                    task1_res = max(self.res)
+                    self.send_data(
+                        self.client, {"data_type": "task1_res", "payload": task1_res}
+                    )  # task1结果
+                elif self.task == "task2":
+                    if self.stage == 1:
+                        task2res1 = max(self.res)
+                        for con in self.client_list_of_rank0_server:
+                            self.send_data(
+                                con, {"data_type": "task2res1", "payload": task2res1}
+                            )  # task2 中间结果
+                        task_queue.put(
+                            {"file": self.taskfilename, "stage": 2, "param": task2res1}
+                        )
+                    elif self.stage == 2:
+                        self.send_data(
+                            self.client, {"data_type": "task2_res", "payload": self.res}
+                        )  # task2 结果
+                self.res = []
 
-    def send_data(self, **kw):
-        data_type: str = kw.get("data_type")
-        senddata = kw.get("data")
-        socket_data = pickle.dumps(senddata)
+    def send_data(self, conn: socket.socket, data):
+        socket_data = pickle.dumps(data)
         data_len = struct.pack("!I", len(socket_data))
-        if (
-            data_type == "client_online" or data_type == "final_res"
-        ):  # 向control节点发送上线信息或者最终结果
-            self.client.sendall(data_len + socket_data)
-        elif data_type == "reduce_data":
-            # 向rank为0的节点发送自己节点计算结果
-            self.no_rank0_client.sendall(data_len + socket_data)
-        elif data_type == "task1res":
-            # task2 向rank非0的节点发送最大值结果
-            kw.get("conn").sendall(data_len + socket_data)
-
-    def send_final_data(self):
-        with self.cond:
-            while len(self.res) != self.size:
-                self.cond.wait()
-            if self.task == "task1":
-                res1 = max(self.res)
-                self.send_data(data=res1, data_type="final_res")
-                self.client.close()
-            elif self.task == "task2":
-                res1 = max(self.res)
-                for con in self.client_list_of_rank0_server:
-                    print("send res1")
-                    print(con)
-                    self.send_data(data=res1, data_type="task1res", conn=con)
-                pass
+        conn.sendall(data_len + socket_data)
 
 
 if __name__ == "__main__":
