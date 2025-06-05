@@ -55,7 +55,7 @@ class My_Socket_Server:
         print(f"new client online {address}")
         self.clientnum += 1
         if self.clientnum == len(self.setup_info):
-            print("All client online,input GOON to start task")
+            print("All client online")
             self.allclientOnline = True
         self.clientlist.append(conn)
 
@@ -102,6 +102,7 @@ class My_Socket_Server:
 
     def broadcast_goon(self, target_ips: list[str]):
         for con in self.clientlist:
+            con: socket.socket
             peer_ip = con.getpeername()[0]
             if peer_ip in target_ips:
                 self.send_data(
@@ -128,10 +129,10 @@ class My_Socket_Server:
                     self.send_data(
                         conn, file_name=f"{user_input}.py", data_type="task_file"
                     )
-                    self.send_data(conn, file_name="setup1.txt", data_type="setup_file")
                     self.send_data(
                         conn, file_name="test_num.txt", data_type="data_file"
                     )
+                    self.send_data(conn, file_name="setup1.txt", data_type="setup_file")
             elif user_input == "close":
                 for conn in self.clientlist:
                     self.send_data(
