@@ -5,13 +5,14 @@ import struct
 import threading
 import subprocess
 import os
-from time import sleep
+import time
 import time
 import json
 
 task_queue = queue.Queue()
 python_path = "/usr/bin/python3"
 script_path = ""
+Server_IP = "192.168.57.1"
 
 
 class My_Socket_Client:
@@ -311,7 +312,7 @@ class My_Socket_Client:
 
 if __name__ == "__main__":
     my_socket = My_Socket_Client()
-    my_socket.connect_server("192.168.57.1", 54321)
+    my_socket.connect_server(Server_IP, 54321)
     print(f"客户端1本地IP和端口{my_socket.client.getsockname()}")
     threading.Thread(target=my_socket.server_handle).start()
     threading.Thread(target=my_socket.execute_task).start()

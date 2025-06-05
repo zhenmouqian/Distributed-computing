@@ -1,12 +1,4 @@
-import os
-import xlutils.copy
-import xlwt
-import xlrd
-import xlutils
-import re
-import struct
 import json
-import random
 
 # with open("test123.txt", "r") as file:
 # file_content = file.read()
@@ -125,8 +117,6 @@ with open("setup1.txt", "w") as f:
 #     for d in allline:
 #         d: dict
 #         print(d.get("rank"), d.get("ip"))
-import psutil
-
 # import netifaces
 
 # print(psutil.net_if_addrs().get("WLAN")[1])
