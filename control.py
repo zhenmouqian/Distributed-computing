@@ -5,15 +5,20 @@ import pickle
 import asyncio
 import threading
 import datetime
+from threading import Condition
+from typing import List
 
 Server_IP = "192.168.57.1"
 
 
 class My_Socket_Server:
     def __init__(self, IP_ADDR: str, IP_PORT: int):
+        self.time1 = 0
+        self.time2 = 0
+        self.stage = 1
+        self.cond = Condition()
         self.clientlist = []
         self.clientnum = 0
-        self.allclientOnline = False
         self.setup_info = None
         self.get_setupinfo()
         self.server: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -38,14 +43,18 @@ class My_Socket_Server:
                     if data_type == "client":
                         self.newClientInit(conn, address)
                     elif "res" in data_type:
-                        self.endtime = datetime.datetime.now()
-                        print(f"time:{self.endtime-self.starttime}")
-                        print(f"Get final result : {data}")
-                    # time:0:00:00.043251   1.1
-                    # time:0:00:00.052753   1.2
-
-                    # time:0:00:00.056767   2.1
-                    # time:0:00:00.054463   2.2
+                        if self.stage == 1:
+                            self.endtime = datetime.datetime.now()
+                            self.time1 = self.endtime - self.starttime
+                            print(f"time1:{self.time1}\nGet final1 result : {data}")
+                            with self.cond:
+                                self.cond.notify_all()
+                        elif self.stage == 2:
+                            self.endtime = datetime.datetime.now()
+                            self.time2 = self.endtime - self.starttime
+                            print(f"time1:{self.time1}\nGet final2 result : {data}")
+                            print(f"{self.time2/self.time1}")
+                            self.stage = 1
                 else:
                     print(data)
             else:
@@ -56,7 +65,6 @@ class My_Socket_Server:
         self.clientnum += 1
         if self.clientnum == len(self.setup_info):
             print("All client online")
-            self.allclientOnline = True
         self.clientlist.append(conn)
 
     def recv_data(self, conn: socket.socket, address: tuple):
@@ -100,7 +108,7 @@ class My_Socket_Server:
                 data_len = struct.pack("!I", len(socket_data))
                 conn.sendall(data_len + socket_data)
 
-    def broadcast_goon(self, target_ips: list[str]):
+    def broadcast_goon(self, target_ips: List[str]):
         for con in self.clientlist:
             con: socket.socket
             peer_ip = con.getpeername()[0]
@@ -117,13 +125,20 @@ class My_Socket_Server:
             user_input = await loop.run_in_executor(None, input)
             if user_input.startswith("GOON"):
                 # 例如输入：GOON 192.168.0.2,192.168.0.3
-                parts = user_input.strip().split()
-                if len(parts) > 1:
-                    target_ips = parts[1].split(",")
-                else:
-                    target_ips = [conf.get("ip") for conf in self.setup_info]
+                # parts = user_input.strip().split()
+                # if len(parts) > 1:
+                #     target_ips = parts[1].split(",")
+                # else:
+                #     target_ips = [conf.get("ip") for conf in self.setup_info]
+                target_ips = [conf.get("ip") for conf in self.setup_info]
                 self.starttime = datetime.datetime.now()
                 self.broadcast_goon(target_ips)
+                with self.cond:
+                    self.cond.wait()
+                self.stage = 2
+                target_ip = [target_ips[0]]
+                self.starttime = datetime.datetime.now()
+                self.broadcast_goon(target_ip)
             elif user_input.startswith("task"):
                 for conn in self.clientlist:
                     self.send_data(
@@ -142,7 +157,6 @@ class My_Socket_Server:
                     )
                 self.clientnum = 0
                 self.clientlist = []
-                self.allclientOnline = False
 
 
 if __name__ == "__main__":

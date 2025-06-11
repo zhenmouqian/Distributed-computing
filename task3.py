@@ -45,7 +45,7 @@ class My_Cal_Node:
                 nums = list(map(int, filter(str.isdigit, line.split())))
                 all_nums.extend(nums)
             cnt = 0
-            for i in range(self.rank + self.size, len(all_nums), self.size):
+            for i in range(2 + self.rank, self.maxNum + 1, self.size):
                 if self.isprime(i):
                     cnt += 1
             print(cnt, end="")
